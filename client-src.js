@@ -102,6 +102,8 @@ window.__ModuleLoader__.load({
     }
     var MASCOT_WIDTH = { small: '110px', mid: '150px', large: '200px' }
     var WALLPAPER_LABELS = { anya: '木屋', lingerie: '幽梦', nightgirls: '花眠', maid: '银姬', silver: '花信', water: '浮光', koi: '锦鲤', roses: '蔷薇', sakura: '樱雪', meadow: '草原', lace: '蕾丝', amethyst: '紫绫', claude: 'Claude' }
+    /* 包内视频壁纸（assets/wallpapers-video/*.mp4）的展示名 */
+    var PKG_VIDEO_LABELS = { 'whale-fantasy': '未至之境' }
     var SET_LABELS = { anya: '阿尼亚', lycoris: '莉可丽丝', yor: '约尔', alya: '艾莉莎', girls100: '百花', roshidere: '败犬', witch: '魔女', mahiru: '邻家' }
 
     /* 颜色工具：#rrggbb → rgb 三元组串 / rgba() 串（主题 accent 派生透明度变体用） */
@@ -116,6 +118,8 @@ window.__ModuleLoader__.load({
         var saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}')
         var s = {}
         for (var k in DEFAULTS) s[k] = saved[k] !== undefined ? saved[k] : DEFAULTS[k]
+        /* 旧「极简」预设已由「未至之境」接替（同档位：默认蓝强调色），迁移旧设置 */
+        if (s.theme === 'minimal') s.theme = 'whale'
         // 旧版单张自定义壁纸（wallpaper:'custom'）迁移为多张格式的第一张
         if (s.wallpaper === 'custom') {
           var ids = Object.keys(loadCustomWalls())
@@ -292,7 +296,9 @@ window.__ModuleLoader__.load({
       /* 动态壁纸（video:<id>）：视频装不进 body 背景，视频层是 DOM 元素（z-index:-1，与图片壁纸
          同层——body 底色之上、全部内容之下）；浓度遮罩做独立 DOM 盖在视频上方（同 z-index 靠
          DOM 顺序在后取胜），深浅两套由 CSS 随原生主题切换，无需重渲染 */
-      if (typeof s.wallpaper === 'string' && s.wallpaper.indexOf('video:') === 0) {
+      var isVideoWall = typeof s.wallpaper === 'string' &&
+        (s.wallpaper.indexOf('video:') === 0 || s.wallpaper.indexOf('pkgvideo:') === 0)
+      if (isVideoWall) {
         out.push(
           'body[data-ds-dark-theme] #dsh-anime-wallpaper-mask { background: linear-gradient(' + d[0] + ',' + d[1] + ') !important; }',
           'body:not([data-ds-dark-theme]) #dsh-anime-wallpaper-mask { background: linear-gradient(rgba(244,246,250,' + (d[1] === DENSITY.mid[1] ? '0.66' : s.density === 'deep' ? '0.80' : '0.52') + '),' +
@@ -302,8 +308,9 @@ window.__ModuleLoader__.load({
 
       /* ---- 全局配色主题：dsh token 覆盖（深色全量 / 浅色仅强调三件套），与壁纸解耦、两种模式都注入 ---- */
       if (th.dark) {
+        var deep = deepDarkTokens(th.dark, th.accent)
         var dkProps = ''
-        for (var tk in th.dark) dkProps += tk + ': ' + th.dark[tk] + ' !important; '
+        for (var tk in deep) dkProps += tk + ': ' + deep[tk] + ' !important; '
         out.push('html body[data-ds-dark-theme] { ' + dkProps + '}')
         var ltProps = ''
         for (var lk in th.lightAccent) ltProps += lk + ': ' + th.lightAccent[lk] + ' !important; '
@@ -381,6 +388,23 @@ window.__ModuleLoader__.load({
           'html body:not([data-ds-dark-theme]) ::selection { background: ' + th.selectionLight + '; }',
         )
       }
+      /* ---- 表面细节适配（参考皮肤 L2/L3：token 覆盖不到的原生表面）----
+         ① 输入框占位符：壁纸/深色底下原生占位符发灰不可读 → 主题次级文字色且强制不透明；
+         ② 内容区链接：取主题强调色（皮肤同款“青色只给状态”的纪律）；
+         ③ 滚动条：细轨 + 主题色滑块，去掉原生粗灰条；
+         ④ 输入卡聚焦：聚焦时描主题强调边 + 外发光（输入中的状态反馈）。 */
+      var phColor = (th.dark && th.dark['--dsw-alias-label-secondary']) || '#8a8a90'
+      out.push(
+        'html body [data-composer-card] ::placeholder,' +
+        ' html body [data-composer-card] textarea::placeholder { color: ' + phColor + ' !important; opacity: 1 !important; }',
+        'html body [class*="centerCol"] a, html body [data-slot="conversation"] a { color: var(--dsh-anime-accent) !important; }',
+        'html body ::-webkit-scrollbar { width: 10px; height: 10px; }',
+        'html body ::-webkit-scrollbar-track { background: transparent; }',
+        'html body ::-webkit-scrollbar-thumb { background: rgba(' + hexRgb(th.accent) + ',0.32); border-radius: 6px; border: 2px solid transparent; background-clip: content-box; }',
+        'html body ::-webkit-scrollbar-thumb:hover { background: rgba(' + hexRgb(th.accent) + ',0.55); border: 2px solid transparent; background-clip: content-box; }',
+        'html body [data-composer-card]:focus-within { border-color: rgba(' + hexRgb(th.accent) + ',0.55) !important;' +
+        ' box-shadow: 0 0 0 1px rgba(' + hexRgb(th.accent) + ',0.28), 0 0 22px rgba(' + hexRgb(th.accent) + ',0.22) !important; }',
+      )
       return out.join('\n')
     }
 
@@ -693,11 +717,144 @@ window.__ModuleLoader__.load({
         glassTint: 'rgba(38,30,22,0.78)', pillText: '#f0d9cc',
       },
       {
-        key: 'minimal', label: '极简', accent: '#4d86fe', accentLight: '#2c5fd6',
-        dark: null, lightAccent: null, selection: null, selectionLight: null,
-        glassTint: 'rgba(30,30,34,0.78)', pillText: '#cfd6ff',
+        /* 未至之境：视觉取自社区皮肤 whale-fantasy（鲸鱼娘 · 未至之境）的约定——
+           夜底 #05070D / 电光蓝 #3A7BFF / 状态青 #39FFD1 / 银白 #E8F1FF / 1px 冷蓝结构线；
+           背景视频用该皮肤的循环片（CC BY-NC-SA 4.0 (c) stushansusu，见
+           assets/wallpapers-video/whale-fantasy.LICENSE.txt），经 pkgvideo: 通道做包内动态壁纸 */
+        key: 'whale', label: '未至之境', accent: '#3A7BFF', accentLight: '#528bff',
+        dark: {
+          '--dsw-alias-bg-base': '#0a1020',
+          '--dsw-alias-bg-layer-1': '#0a1020',
+          '--dsw-alias-bg-layer-2': '#142847',
+          '--dsw-alias-bg-layer-3': '#183059',
+          '--dsw-alias-bg-overlay': '#0a1020',
+          '--dsw-alias-bg-mask-1': 'rgba(10,16,32,0.80)',
+          '--dsw-alias-bg-mask-2': 'rgba(10,16,32,0.60)',
+          '--dsw-alias-bg-mask-3': 'rgba(10,16,32,0.40)',
+          '--dsw-alias-bg-mask-drop': 'rgba(5,7,13,0.50)',
+          '--dsw-alias-bg-mask-photo': 'rgba(5,7,13,0.65)',
+          '--dsw-alias-bg-module-platform': 'rgba(20,40,71,0.50)',
+          '--dsw-alias-bg-multi-select': 'rgba(58,123,255,0.30)',
+          '--dsw-alias-bg-skeleton': 'rgba(143,168,204,0.12)',
+          '--dsw-specific-sidebar-fill': '#0a1020',
+          '--dsw-alias-border-inverted': '#0A1020',
+          '--dsw-alias-border-inverted2': '#142847',
+          '--dsw-alias-border-l1': 'rgba(30,58,107,0.30)',
+          '--dsw-alias-border-l2': 'rgba(30,58,107,0.45)',
+          '--dsw-alias-border-l3': 'rgba(30,58,107,0.60)',
+          '--dsw-alias-border-l4': 'rgba(30,58,107,0.80)',
+          '--dsw-alias-label-primary': '#E8F1FF',
+          '--dsw-alias-label-secondary': '#8FA8CC',
+          '--dsw-alias-label-primary-bluish': '#77a4ff',
+          '--dsw-alias-label-primary-dimmed': '#8FA8CC',
+          '--dsw-alias-label-primary-foreground': '#0A1020',
+          '--dsw-alias-label-primary-inverted': '#05070D',
+          '--dsw-alias-brand-primary': '#3A7BFF',
+          '--dsw-alias-brand-text': '#3A7BFF',
+          '--dsw-alias-brand-primary-invert': '#0A1020',
+          '--dsw-alias-button-contrast-fill': '#E8F1FF',
+          '--dsw-alias-button-elevated-fill': 'rgba(10,16,32,0.56)',
+          '--dsw-alias-button-floating-fill': 'rgba(10,16,32,0.56)',
+          '--dsw-alias-button-floating-hover': '#142847',
+          '--dsw-alias-button-tool-bar-fill': 'rgba(10,16,32,0.52)',
+          '--dsw-alias-button-tool-bar-hover': '#142847',
+          '--dsw-alias-button-ghost-active-border': 'rgba(58,123,255,0.30)',
+          '--dsw-alias-button-ghost-active-fill': 'rgba(58,123,255,0.12)',
+          '--dsw-alias-button-ghost-active-hover': 'rgba(58,123,255,0.18)',
+          '--dsw-alias-button-primary-dimmed': 'rgba(58,123,255,0.35)',
+          '--dsw-alias-interactive-bg-active': 'rgba(58,123,255,0.22)',
+          '--dsw-alias-interactive-bg-hover': 'rgba(58,123,255,0.14)',
+          '--dsw-alias-interactive-bg-hover-accent': 'rgba(58,123,255,0.22)',
+          '--dsw-alias-state-business-primary': '#3A7BFF',
+          '--dsw-alias-brand-primary-new-colorprimary-new-color': '#3A7BFF',
+          '--dsw-specific-sidebar-nav-item-active-accent': 'rgba(58,123,255,0.30)',
+          '--dsw-linear-gradient-think': 'linear-gradient(90deg, rgba(57,255,209,0.24) 0%, rgba(58,123,255,0.12) 100%)',
+          '--dsw-linear-think-select': 'rgba(57,255,209,0.28)',
+        },
+        lightAccent: {
+          '--dsw-alias-state-business-primary': '#2c5fd6',
+          '--dsw-alias-brand-primary-new-colorprimary-new-color': '#2c5fd6',
+          '--dsw-specific-sidebar-nav-item-active-accent': 'rgba(44,95,214,0.25)',
+        },
+        selection: 'rgba(58,123,255,0.34)', selectionLight: 'rgba(44,95,214,0.30)',
+        glassTint: 'rgba(10,16,32,0.78)', pillText: '#cfe0ff',
       },
     ]
+
+    /* ---- 深度 token 展开（参考社区皮肤 L1 全量重映射的做法）----
+       每个主题原本只声明 ~13 个 token，按钮/交互态/遮罩/标签等家族缺失，
+       换肤后大量表面退回原生灰——这就是"适配性不够、细节不好"的主因。
+       deepDarkTokens() 从主题的基础色（bg-base / accent / 已声明的边框色）
+       派生完整 token 家族，主题显式声明的值永远优先。 */
+    function mixHex(h1, h2, t) {
+      function px(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255] }
+      var a = px(h1), b = px(h2), o = [0, 1, 2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * t) })
+      var h = '#'
+      for (var i = 0; i < 3; i++) h += ('0' + o[i].toString(16)).slice(-2)
+      return h
+    }
+    function scaleAlpha(rgbaStr, factor) {
+      var m = rgbaStr.match(/rgba?\(([^)]+)\)/)
+      if (!m) return rgbaStr
+      var q = m[1].split(',').map(function (x) { return parseFloat(x) })
+      var a = q.length > 3 ? q[3] : 1
+      return 'rgba(' + q[0] + ',' + q[1] + ',' + q[2] + ',' + Math.min(1, a * factor).toFixed(3) + ')'
+    }
+    function deepDarkTokens(dark, accent) {
+      if (!dark) return null
+      var base = dark['--dsw-alias-bg-base'] || '#1e1e1e'
+      var line = dark['--dsw-alias-border-l1'] || 'rgba(255,255,255,0.08)'
+      var l1 = dark['--dsw-alias-bg-layer-1'] || mixHex(base, '#ffffff', 0.04)
+      var l2 = dark['--dsw-alias-bg-layer-2'] || mixHex(base, '#ffffff', 0.08)
+      var l3 = dark['--dsw-alias-bg-layer-3'] || mixHex(base, '#ffffff', 0.12)
+      var derived = {
+        '--dsw-alias-bg-layer-1': l1,
+        '--dsw-alias-bg-layer-2': l2,
+        '--dsw-alias-bg-layer-3': l3,
+        '--dsw-alias-bg-mask-1': 'rgba(' + hexRgb(base) + ',0.80)',
+        '--dsw-alias-bg-mask-2': 'rgba(' + hexRgb(base) + ',0.60)',
+        '--dsw-alias-bg-mask-3': 'rgba(' + hexRgb(base) + ',0.40)',
+        '--dsw-alias-bg-mask-drop': 'rgba(' + hexRgb(base) + ',0.50)',
+        '--dsw-alias-bg-mask-photo': 'rgba(' + hexRgb(base) + ',0.65)',
+        '--dsw-alias-bg-module-platform': 'rgba(' + hexRgb(l2) + ',0.50)',
+        '--dsw-alias-bg-multi-select': hexRgba(accent, 0.30),
+        '--dsw-alias-bg-skeleton': scaleAlpha(line, 1.5),
+        '--dsw-alias-bg-overlay': dark['--dsw-alias-bg-overlay'] || mixHex(base, '#000000', 0.25),
+        '--dsw-alias-border-l3': scaleAlpha(line, 3),
+        '--dsw-alias-border-l4': scaleAlpha(line, 4.5),
+        '--dsw-alias-button-primary-fill': accent,
+        '--dsw-alias-button-primary-hover': mixHex(accent, '#ffffff', 0.18),
+        '--dsw-alias-button-primary-dimmed': hexRgba(accent, 0.35),
+        '--dsw-alias-button-info-fill': accent,
+        '--dsw-alias-button-info-hover': mixHex(accent, '#ffffff', 0.18),
+        '--dsw-alias-button-elevated-fill': 'rgba(' + hexRgb(l1) + ',0.72)',
+        '--dsw-alias-button-elevated-hover': 'rgba(' + hexRgb(l2) + ',0.85)',
+        '--dsw-alias-button-floating-fill': 'rgba(' + hexRgb(l1) + ',0.72)',
+        '--dsw-alias-button-floating-hover': l2,
+        '--dsw-alias-button-tool-bar-fill': 'rgba(' + hexRgb(l1) + ',0.60)',
+        '--dsw-alias-button-tool-bar-fill-invisible': 'rgba(' + hexRgb(l1) + ',0)',
+        '--dsw-alias-button-tool-bar-hover': l2,
+        '--dsw-alias-button-ghost-active-border': hexRgba(accent, 0.30),
+        '--dsw-alias-button-ghost-active-fill': hexRgba(accent, 0.12),
+        '--dsw-alias-button-ghost-active-hover': hexRgba(accent, 0.18),
+        '--dsw-alias-button-contrast-fill': dark['--dsw-alias-label-primary'] || '#ffffff',
+        '--dsw-alias-interactive-bg-active': hexRgba(accent, 0.22),
+        '--dsw-alias-interactive-bg-hover': hexRgba(accent, 0.14),
+        '--dsw-alias-interactive-bg-hover-accent': hexRgba(accent, 0.22),
+        '--dsw-alias-label-primary-bluish': mixHex(accent, '#ffffff', 0.25),
+        '--dsw-alias-label-primary-dimmed': dark['--dsw-alias-label-secondary'] || '#8a8a90',
+        '--dsw-alias-label-primary-foreground': base,
+        '--dsw-alias-label-primary-inverted': base,
+        '--dsw-alias-brand-primary-invert': base,
+        '--dsw-alias-brand-text': dark['--dsw-alias-brand-primary'] || accent,
+        '--dsw-alias-border-inverted': base,
+        '--dsw-alias-border-inverted2': l2,
+      }
+      var out = {}
+      for (var k in derived) out[k] = derived[k]
+      for (var k2 in dark) out[k2] = dark[k2]   /* 显式声明优先 */
+      return out
+    }
 
     /** 按 key 取主题定义；未知 key 回退首个（anya） */
     function getTheme(key) {
@@ -708,6 +865,9 @@ window.__ModuleLoader__.load({
     /** 壁纸/挂件当前值的展示名 */
     function wallpaperName(s) {
       if (s.wallpaper === 'none') return '无'
+      if (typeof s.wallpaper === 'string' && s.wallpaper.indexOf('pkgvideo:') === 0) {
+        return PKG_VIDEO_LABELS[s.wallpaper.slice(9)] || '动态壁纸'
+      }
       if (typeof s.wallpaper === 'string' && s.wallpaper.indexOf('video:') === 0) {
         return videoMeta[s.wallpaper.slice(6)] || '动态壁纸'
       }
@@ -758,7 +918,7 @@ window.__ModuleLoader__.load({
       yor: { wall: 'lingerie', mascot: 'yor' },
       alya: { wall: 'silver', mascot: 'alya' },
       claude: { wall: 'claude', mascot: 'random' },
-      minimal: { wall: 'none', mascot: 'random' },
+      whale: { wall: 'pkgvideo:whale-fantasy', mascot: 'random' },
     }
 
     /** 主题卡卡面：推荐壁纸打底 + 右上角三色块点缀（体现配色）+ 底部名称条；
@@ -767,7 +927,13 @@ window.__ModuleLoader__.load({
       var bundle = THEME_BUNDLES[def.key] || { wall: 'none', mascot: 'random' }
       var card = el('button', 'position:relative;width:100%;height:58px;border-radius:8px;overflow:hidden;cursor:pointer;padding:0;font-family:inherit;')
       card.className = 'dsh-theme-card' + (settings.theme === def.key ? ' on' : '')
-      var wallUri = bundle.wall !== 'none' && ASSETS.wallpapers[bundle.wall] ? ASSETS.wallpapers[bundle.wall] : null
+      var wallUri = null
+      if (bundle.wall.indexOf('pkgvideo:') === 0) {
+        var pk = bundle.wall.slice(9)
+        wallUri = (ASSETS.videoPosters || {})[pk] || null
+      } else if (bundle.wall !== 'none' && ASSETS.wallpapers[bundle.wall]) {
+        wallUri = ASSETS.wallpapers[bundle.wall]
+      }
       if (wallUri) {
         card.style.background = 'url(' + wallUri + ') center/cover'
         /* 右上角三色块：该主题的全局配色缩影（accent / 侧栏底 / 内容底） */
@@ -1001,6 +1167,15 @@ window.__ModuleLoader__.load({
               onChange(patch)
             })
           }, '🎬'))
+      })
+      /* 包内视频壁纸格（随包分发、不可删除） */
+      Object.keys(ASSETS.videos || {}).forEach(function (key) {
+        grid.appendChild(gridCell(
+          (ASSETS.videoPosters || {})[key] || null,
+          PKG_VIDEO_LABELS[key] || key,
+          settings.wallpaper === 'pkgvideo:' + key,
+          function () { onChange({ wallpaper: 'pkgvideo:' + key }) },
+          null, '🎬'))
       })
       var uploadVideoCell = el('button', 'width:100%;height:54px;border-radius:8px;cursor:pointer;padding:0;font-size:11px;font-family:inherit;', '🎬 上传动态壁纸')
       uploadVideoCell.className = 'dsh-grid-cell'
@@ -1309,7 +1484,11 @@ window.__ModuleLoader__.load({
         /* 动态壁纸：视频层 + 浓度遮罩（遮罩底色由 buildCss 规则按深浅模式着色）。
            render 同步而 IDB 异步：先挂空 src 的 video，再异步取 Blob 建 objectURL 回填；
            过期渲染（视频节点已被新一轮替换）的 URL 立即释放 */
-        if (typeof settings.wallpaper === 'string' && settings.wallpaper.indexOf('video:') === 0) {
+        var isVideoWallR = typeof settings.wallpaper === 'string' &&
+          (settings.wallpaper.indexOf('video:') === 0 || settings.wallpaper.indexOf('pkgvideo:') === 0)
+        if (isVideoWallR) {
+          var isPkg = settings.wallpaper.indexOf('pkgvideo:') === 0
+          var pkgKey = isPkg ? settings.wallpaper.slice(9) : null
           var vid = document.createElement('video')
           vid.id = 'dsh-anime-wallpaper-video'
           vid.autoplay = true
@@ -1317,10 +1496,15 @@ window.__ModuleLoader__.load({
           vid.muted = true
           vid.setAttribute('playsinline', '')
           vid.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:-1;pointer-events:none;'
+          if (isPkg && ASSETS.videoPosters && ASSETS.videoPosters[pkgKey]) vid.poster = ASSETS.videoPosters[pkgKey]
           document.body.appendChild(vid)
           var mask = el('div', 'position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;')
           mask.id = 'dsh-anime-wallpaper-mask'
           document.body.appendChild(mask)
+          /* 包内视频：素材已内联为 data URI，直接赋 src（无 IDB、无 objectURL） */
+          if (isPkg) {
+            if (ASSETS.videos && ASSETS.videos[pkgKey]) vid.src = ASSETS.videos[pkgKey]
+          } else
           idbGet(settings.wallpaper.slice(6)).then(function (rec) {
             if (!rec || !rec.blob) return
             var url = URL.createObjectURL(rec.blob)
